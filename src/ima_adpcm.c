@@ -35,6 +35,7 @@ typedef struct IMA_ADPCM_PRIVATE_tag
 	int				blockcount, samplecount ;
 	int				previous [2] ;
 	int				stepindx [2] ;
+	int				*predictors ;
 	unsigned char	*block ;
 	short			*samples ;
 	short			data	[] ; /* ISO C99 struct flexible array. */
@@ -196,6 +197,8 @@ ima_reader_init (SF_PRIVATE *psf, int blockalign, int samplesperblock)
 	pima->blocksize			= blockalign ;
 	pima->samplesperblock	= samplesperblock ;
 
+	pima->predictors = calloc (pima->channels, sizeof (int)) ;
+
 	psf->filelength = psf_get_filelen (psf) ;
 	psf->datalength = (psf->dataend) ? psf->dataend - psf->dataoffset :
 							psf->filelength - psf->dataoffset ;
@@ -273,6 +276,9 @@ count ++ ;
 
 		/* Sign-extend from 16 bits to 32. */
 		predictor = (int) ((short) ((blockdata [0] << 8) | (blockdata [1] & 0x80))) ;
+		if ((pima->predictors [chan] & (int) 0xFFFFFF80) != predictor)
+		{	pima->predictors [chan] = predictor ;
+			} ;
 
 		stepindx = blockdata [1] & 0x7F ;
 		stepindx = clamp_ima_step_index (stepindx) ;
@@ -302,13 +308,13 @@ count ++ ;
 			if (bytecode & 4)	diff += step ;
 			if (bytecode & 8)	diff = -diff ;
 
-			predictor += diff ;
-			if (predictor < -32768)
-				predictor = -32768 ;
-			else if (predictor > 32767)
-				predictor = 32767 ;
+			pima->predictors [chan] += diff ;
+			if (pima->predictors [chan] < -32768)
+				pima->predictors [chan] = -32768 ;
+			else if (pima->predictors [chan] > 32767)
+				pima->predictors [chan] = 32767 ;
 
-			pima->samples [pima->channels * k + chan] = predictor ;
+			pima->samples [pima->channels * k + chan] = pima->predictors [chan] ;
 			} ;
 		} ;
 
